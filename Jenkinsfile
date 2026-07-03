@@ -1,9 +1,22 @@
 pipeline {
     agent any
 
+    tools {
+        maven 'Maven'
+    }
+
     environment {
-        IMAGE = "pranavjambare/employee-app"
-        TAG = "${BUILD_NUMBER}"
+        PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+        IMAGE_NAME = "pranavjambare/employee-app"
+        IMAGE_TAG  = "${BUILD_NUMBER}"
+
+        SONAR_HOST = "SonarQube"
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
     }
 
     stages {
@@ -14,34 +27,121 @@ pipeline {
             }
         }
 
-        stage('Build Jar') {
+        stage('Verify Tools') {
             steps {
-                sh './mvnw clean package'
+                sh '''
+                    java -version
+                    mvn -version
+                    docker --version
+                    trivy --version
+                '''
             }
         }
 
-        stage('Docker Build') {
+        stage('Compile') {
             steps {
-                sh "docker build -t $IMAGE:$TAG ."
+                sh 'chmod +x mvnw'
+                sh './mvnw clean compile'
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh './mvnw test'
+            }
+        }
+
+        stage('Package') {
+            steps {
+                sh './mvnw package -DskipTests'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv("${SONAR_HOST}") {
+                    withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                        sh '''
+                        ./mvnw sonar:sonar \
+                          -Dsonar.token=$SONAR_TOKEN
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Trivy File System Scan') {
+            steps {
+                sh '''
+                    trivy fs . \
+                    --severity HIGH,CRITICAL \
+                    --exit-code 0
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                    docker build \
+                    -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                    -t ${IMAGE_NAME}:latest .
+                """
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh """
+                    trivy image ${IMAGE_NAME}:${IMAGE_TAG} \
+                    --severity HIGH,CRITICAL \
+                    --exit-code 0
+                """
             }
         }
 
         stage('Docker Login') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: '28658194-41d0-467e-b36f-b7563a12baff',
-                    usernameVariable: 'USER',
-                    passwordVariable: 'PASS'
-                )]) {
-                    sh 'echo $PASS | docker login -u $USER --password-stdin'
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: '28658194-41d0-467e-b36f-b7563a12baff',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login \
+                        -u "$DOCKER_USER" \
+                        --password-stdin
+                    '''
                 }
             }
         }
 
-        stage('Push Image') {
+        stage('Push Docker Images') {
             steps {
-                sh "docker push $IMAGE:$TAG"
+                sh """
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push ${IMAGE_NAME}:latest
+                """
             }
+        }
+    }
+
+    post {
+
+        success {
+            echo "Build Successful"
+            echo "Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+        }
+
+        failure {
+            echo "Build Failed"
+        }
+
+        always {
+            cleanWs()
         }
     }
 }
