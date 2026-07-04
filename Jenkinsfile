@@ -61,8 +61,8 @@ pipeline {
                 withSonarQubeEnv("${SONAR_HOST}") {
                     withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                         sh '''
-                        ./mvnw sonar:sonar \
-                          -Dsonar.token=$SONAR_TOKEN
+                            ./mvnw sonar:sonar \
+                              -Dsonar.token=$SONAR_TOKEN
                         '''
                     }
                 }
@@ -108,7 +108,6 @@ pipeline {
                         passwordVariable: 'DOCKER_PASS'
                     )
                 ]) {
-
                     sh '''
                         echo "$DOCKER_PASS" | docker login \
                         -u "$DOCKER_USER" \
@@ -126,9 +125,8 @@ pipeline {
                 """
             }
         }
-    }
 
-    stage('Clone K8s Repository') {
+        stage('Clone K8s Repository') {
             steps {
                 dir('employee-app-k8s') {
                     git(
@@ -173,7 +171,6 @@ pipeline {
     }
 
     post {
-
         success {
             echo "===================================="
             echo "Build Successful"
@@ -184,7 +181,7 @@ pipeline {
         }
 
         failure {
-            echo "Build is Failed"
+            echo "Build Failed"
         }
 
         always {
