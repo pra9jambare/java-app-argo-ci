@@ -137,7 +137,7 @@ pipeline {
         }
 
         failure {
-            echo "Build Failed"
+            echo "Build is Failed"
         }
 
         always {
