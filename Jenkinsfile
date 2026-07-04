@@ -128,11 +128,59 @@ pipeline {
         }
     }
 
+    stage('Clone K8s Repository') {
+            steps {
+                dir('employee-app-k8s') {
+                    git(
+                        branch: 'main',
+                        credentialsId: 'f24fbff2-af87-4123-a0cb-2a9226841d92',
+                        url: 'https://github.com/pra9jambare/employee-app-k8s.git'
+                    )
+                }
+            }
+        }
+
+        stage('Update Deployment Manifest') {
+            steps {
+                dir('employee-app-k8s') {
+                    sh """
+                        sed -i '' 's#image: .*#image: ${IMAGE_NAME}:${IMAGE_TAG}#' deployment.yaml
+
+                        echo "Updated deployment.yaml"
+
+                        cat deployment.yaml
+                    """
+                }
+            }
+        }
+
+        stage('Commit & Push Manifest') {
+            steps {
+                dir('employee-app-k8s') {
+                    sh """
+                        git config user.name "Jenkins"
+                        git config user.email "jenkins@local"
+
+                        git add deployment.yaml
+
+                        git commit -m "Update image to ${IMAGE_TAG}" || true
+
+                        git push origin main
+                    """
+                }
+            }
+        }
+    }
+
     post {
 
         success {
+            echo "===================================="
             echo "Build Successful"
-            echo "Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "Docker Image : ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "GitOps Manifest Updated"
+            echo "Argo CD will automatically deploy."
+            echo "===================================="
         }
 
         failure {
