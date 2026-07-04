@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     tools {
-        maven 'Maven'
+        maven 'Maven-3'
     }
 
     environment {
@@ -16,7 +16,6 @@ pipeline {
 
     options {
         timestamps()
-        ansiColor('xterm')
     }
 
     stages {
